@@ -28,16 +28,16 @@ function composite(fixed,infl){return fixed+2*infl+fixed*infl}
 function estimateBond(b,now=new Date()){
  const age=Math.max(0,monthDiff(b.issueMonth,now)), principal=Number(b.amount);
  const fixed=issueFixed(b.issueMonth);
- if(fixed===null||b.issueMonth<'2022-05') return {value:principal,redeemable:age<12?0:principal,interest:0,rate:null,age,beta:true};
+ if(fixed===null||b.issueMonth<'2022-05') return {value:null,redeemable:null,interest:null,rate:null,age,beta:true,unsupported:true};
  let value=principal, monthlyValues=[principal], rate=null;
  // Beta approximation: determine each 6-month earning period from issue-month anniversary and published semiannual tables.
  for(let i=0;i<age;i++){
    const period=Math.floor(i/6), periodStart=addMonths(b.issueMonth,period*6);
    const key=periodStart.getFullYear()+'-'+String(periodStart.getMonth()+1).padStart(2,'0');
    const rr=RATE_TABLE.filter(x=>x.start<=key).sort((a,c)=>c.start.localeCompare(a.start))[0];
-   if(!rr){return {value,redeemable:age<12?0:value,interest:value-principal,rate,beta:true,age}}
+   if(!rr){return {value:null,redeemable:null,interest:null,rate:null,beta:true,age,unsupported:true}}
    rate=composite(fixed,rr.inflation);
-   value*=Math.pow(1+rate,1/12);
+   value*=Math.pow(1+rate,1/6);
    monthlyValues.push(value);
  }
  let redeemable=age<12?0:value;
@@ -45,15 +45,19 @@ function estimateBond(b,now=new Date()){
  return {value,redeemable,interest:value-principal,rate,beta:true,age};
 }
 function snapshot(){return {schemaVersion:1,exportedAt:new Date().toISOString(),bonds}}
+function validBond(b){return b&&typeof b.id==='string'&&typeof b.issueMonth==='string'&&/^\d{4}-\d{2}$/.test(b.issueMonth)&&Number.isFinite(Number(b.amount))&&Number(b.amount)>=25&&typeof b.modifiedAt==='string'}
+async function clearBonds(){return new Promise((res,rej)=>{const r=tx(STORE,'readwrite').clear();r.onsuccess=res;r.onerror=()=>rej(r.error)})}
+async function replaceBonds(next){if(!Array.isArray(next)||!next.every(validBond))throw Error('Invalid portfolio data');await clearBonds();for(const b of next)await put(b);await load()}
+function mergeBonds(local,cloud){const m=new Map();for(const b of [...local,...cloud]){if(!validBond(b))continue;const old=m.get(b.id);if(!old||b.modifiedAt>old.modifiedAt)m.set(b.id,b)}return [...m.values()]}
 async function load(){bonds=await getAll();render()}
 function render(){
- const data=bonds.map(b=>({...b,calc:estimateBond(b)}));const principal=data.reduce((s,b)=>s+Number(b.amount),0),value=data.reduce((s,b)=>s+b.calc.value,0),redeem=data.reduce((s,b)=>s+b.calc.redeemable,0);
- $('#portfolioValue').textContent=money(value);$('#principal').textContent=money(principal);$('#redeemable').textContent=money(redeem);$('#portfolioChange').textContent='+'+money(value-principal)+' interest';
+ const data=bonds.map(b=>({...b,calc:estimateBond(b)}));const principal=data.reduce((s,b)=>s+Number(b.amount),0),supported=data.filter(b=>!b.calc.unsupported),value=supported.reduce((s,b)=>s+b.calc.value,0),redeem=supported.reduce((s,b)=>s+b.calc.redeemable,0),hasUnsupported=supported.length!==data.length;
+ $('#portfolioValue').textContent=hasUnsupported?'Estimate pending':money(value);$('#principal').textContent=money(principal);$('#redeemable').textContent=hasUnsupported?'Estimate pending':money(redeem);$('#portfolioChange').textContent=hasUnsupported?'Older bond valuation data pending audit':'+'+money(value-principal)+' interest';
  $('#empty').hidden=bonds.length>0;const list=$('#bondList');list.innerHTML='';
  data.sort((a,b)=>sortNewest?b.issueMonth.localeCompare(a.issueMonth):a.issueMonth.localeCompare(b.issueMonth)).forEach(b=>{
   const el=document.createElement('article');el.className='bond card';el.innerHTML='<div class="bond-icon">I</div><div><h3></h3><p></p></div><div class="bond-value money"><b></b><small></small></div>';
   el.querySelector('h3').textContent=b.nickname||'I Bond';el.querySelector('p').textContent=fmtMonth(addMonths(b.issueMonth,0))+' • '+money(b.amount)+' principal';
-  el.querySelector('.bond-value b').textContent=money(b.calc.value);el.querySelector('.bond-value small').textContent='+'+money(b.calc.interest);
+  el.querySelector('.bond-value b').textContent=b.calc.unsupported?'Estimate pending':money(b.calc.value);el.querySelector('.bond-value small').textContent=b.calc.unsupported?'Rate history pending':'+'+money(b.calc.interest);
   el.addEventListener('click',()=>editBond(b));list.appendChild(el);
  });
 }
@@ -61,7 +65,7 @@ function editBond(b){$('#dialogTitle').textContent='Edit I Bond';$('#editId').va
 function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 function applyTheme(v){localStorage.setItem('theme',v);document.documentElement.dataset.theme=v==='system'?'':v;$('#appearanceState').textContent=v[0].toUpperCase()+v.slice(1)}
 async function exportBackup(){const blob=new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ibond-ledger-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);toast('Backup exported')}
-async function importBackup(file){const data=JSON.parse(await file.text());if(data.schemaVersion!==1||!Array.isArray(data.bonds))throw Error('Unsupported backup');for(const b of data.bonds)await put(b);await load();toast('Portfolio restored')}
+async function importBackup(file){const data=JSON.parse(await file.text());if(data.schemaVersion!==1||!Array.isArray(data.bonds)||!data.bonds.every(validBond))throw Error('Unsupported or invalid backup');if(!confirm('Restore will replace the portfolio on this device. Continue?'))return;await replaceBonds(data.bonds);toast('Portfolio restored')}
 async function getMeta(key){return new Promise((res,rej)=>{const r=tx(META).get(key);r.onsuccess=()=>res(r.result?.value);r.onerror=()=>rej(r.error)})}
 async function setMeta(key,value){return put({key,value},META)}
 function driveReady(){return GOOGLE_CLIENT_ID&&window.google?.accounts?.oauth2}
@@ -72,9 +76,19 @@ async function downloadDrive(id){const r=await driveFetch('https://www.googleapi
 async function uploadDrive(id,data){const body=JSON.stringify(data),boundary='ibondledgerboundary';const meta=id?{}:{name:'ibond-ledger.json',parents:['appDataFolder']};const payload='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+boundary+'--';const url=id?'https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=multipart':'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';return driveFetch(url,{method:id?'PATCH':'POST',headers:{'Content-Type':'multipart/related; boundary='+boundary},body:payload})}
 async function syncDrive(){
  try{
-  $('#syncTitle').textContent='Syncing…';const file=await findDriveFile(),local=snapshot(),localStamp=await getMeta('lastChange')||'';
+  $('#syncTitle').textContent='Syncing…';const file=await findDriveFile(),local=snapshot();
   if(!file){await uploadDrive(null,local)}
-  else{const cloud=await downloadDrive(file.id),cloudStamp=cloud.exportedAt||'';if(cloudStamp>localStamp&&bonds.length){if(!confirm('Google Drive has a newer portfolio. Replace this device copy with it?')){await uploadDrive(file.id,local)}else{for(const b of cloud.bonds||[])await put(b);await load()}}else await uploadDrive(file.id,local)}
+  else{
+   const cloud=await downloadDrive(file.id);if(!Array.isArray(cloud.bonds)||!cloud.bonds.every(validBond))throw Error('Cloud portfolio is invalid');
+   if(bonds.length===0&&cloud.bonds.length){await replaceBonds(cloud.bonds)}
+   else{
+    const merged=mergeBonds(bonds,cloud.bonds);
+    const localChanged=JSON.stringify(merged)!==JSON.stringify(bonds),cloudChanged=JSON.stringify(merged)!==JSON.stringify(cloud.bonds);
+    if(localChanged&&cloudChanged&&!confirm('Both this device and Google Drive contain newer changes. Merge both portfolios?')){$('#syncTitle').textContent='Sync unresolved';$('#syncStatus').textContent='No data was overwritten';toast('Sync left unchanged');return}
+    if(localChanged)await replaceBonds(merged);
+    if(cloudChanged)await uploadDrive(file.id,{schemaVersion:1,exportedAt:new Date().toISOString(),bonds:merged});
+   }
+  }
   const now=new Date().toISOString();await setMeta('lastSync',now);$('#syncTitle').textContent='Synced';$('#syncStatus').textContent='Google Drive • '+new Date(now).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});toast('Google Drive synced')
  }catch(e){$('#syncTitle').textContent='Sync needs attention';$('#syncStatus').textContent=e.message;toast('Sync failed')}
 }
