@@ -33,6 +33,9 @@ function estimateBond(b,now=new Date()){
  const fixed=issueFixed(b.issueMonth);
  if(fixed===null||b.issueMonth<'2022-05') return {value:null,redeemable:null,interest:null,rate:null,age,beta:true,unsupported:true};
  let value=principal, monthlyValues=[principal], rate=null;
+ const issueRateRow=RATE_TABLE.filter(x=>x.start<=b.issueMonth).sort((a,c)=>c.start.localeCompare(a.start))[0];
+ if(!issueRateRow)return {value:null,redeemable:null,interest:null,rate:null,beta:true,age,unsupported:true};
+ rate=composite(fixed,issueRateRow.inflation);
  // Beta approximation: determine each 6-month earning period from issue-month anniversary and published semiannual tables.
  for(let i=0;i<age;i++){
    const period=Math.floor(i/6), periodStart=addMonths(b.issueMonth,period*6);
@@ -58,7 +61,8 @@ function mergeBonds(local,cloud){
  const invalid=[...local,...cloud].filter(b=>!validBond(b));if(invalid.length)throw Error(invalid.length+' invalid bond record(s); sync stopped');
  const m=new Map();for(const b of [...local,...cloud]){const old=m.get(b.id);if(!old||b.modifiedAt>old.modifiedAt)m.set(b.id,b)}return [...m.values()]
 }
-function canonicalBonds(items){return [...items].sort((a,b)=>a.id.localeCompare(b.id)).map(b=>JSON.stringify(b)).join('\n')}
+function stableRecordString(b){const keys=Object.keys(b).sort();const ordered={};for(const k of keys)ordered[k]=b[k];return JSON.stringify(ordered)}
+function canonicalBonds(items){return [...items].sort((a,b)=>a.id.localeCompare(b.id)).map(stableRecordString).join('\n')}
 function sameBondSet(a,b){return canonicalBonds(a)===canonicalBonds(b)}
 async function load(){bonds=await getAll();render()}
 function render(){
