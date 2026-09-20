@@ -29,13 +29,13 @@
 <label>Nickname<input id="nickname" maxlength="40" placeholder="e.g. Inflation Hedge"></label>
 <label>Issue month<input id="issueMonth" type="month" min="1998-09" required></label>
 <label>Purchase amount<input id="amount" type="number" min="25" max="10000" step="0.01" inputmode="decimal" required></label>
-<input id="editId" type="hidden"><div class="dialog-actions"><button type="button" class="secondary close">Cancel</button><button class="primary" value="default">Save Bond</button></div></form></dialog>
+<input id="editId" type="hidden"><div class="dialog-actions"><button id="deleteBtn" type="button" class="danger" hidden>Delete</button><span class="spacer"></span><button type="button" class="secondary close">Cancel</button><button class="primary" value="default">Save Bond</button></div></form></dialog>
 <dialog id="moreDialog"><div class="dialog-head"><h2>Portfolio & Data</h2><button class="icon-btn close-more">×</button></div>
 <div class="settings-list">
 <button id="exportBtn">Export backup <span>›</span></button><label class="file-button">Import backup<input id="importFile" type="file" accept="application/json"><span>›</span></label>
 <button id="driveBtn">Google Drive sync <span id="driveState">Set up</span></button><button id="appearanceBtn">Appearance <span id="appearanceState">System</span></button>
 </div><p class="fine">Google Drive sync requires a Google OAuth client ID. The app requests only Drive app-data access; TreasuryDirect credentials are never requested.</p></dialog>
-<dialog id="themeDialog"><div class="dialog-head"><h2>Appearance</h2><button class="icon-btn close-theme">×</button></div><div class="theme-options"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div></dialog>
+<dialog id="themeDialog"><div class="dialog-head"><h2>Appearance</h2><button class="icon-btn close-theme">×</button></div><div class="theme-options"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div></dialog><dialog id="analyticsDialog"><div class="dialog-head"><h2>Analytics</h2><button class="icon-btn close-panel">×</button></div><div id="analyticsBody"></div></dialog><dialog id="timelineDialog"><div class="dialog-head"><h2>Bond Timeline</h2><button class="icon-btn close-panel">×</button></div><div id="timelineBody"></div></dialog>
 <div id="toast" role="status"></div>
 <script src="https://accounts.google.com/gsi/client" async defer></script><script type="module" src="./app.js"></script>
 </body></html>
