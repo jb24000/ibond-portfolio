@@ -49,9 +49,31 @@ export function fmtMonthKey(ym){
  return monthDate(ym).toLocaleDateString('en-US',{month:'short',year:'numeric'});
 }
 export function fixedRateForIssue(issueMonth){
- return latestAtOrBefore(FIXED_RATES,issueMonth)?.[1]??null;
+ return latestAtOrBefore(fixedTable(),issueMonth)?.[1]??null;
 }
 export const DATA_THROUGH=INFLATION_RATES.at(-1)[0];
+let RATE_UPDATES=[];
+function nextAnnouncementKey(key){
+ const [y,m]=key.split('-').map(Number);
+ return m===5?y+'-11':(y+1)+'-05';
+}
+export function nextRatePeriod(){return nextAnnouncementKey(rateDataThrough())}
+export function setRateUpdates(updates=[]){
+ if(!Array.isArray(updates)){RATE_UPDATES=[];return RATE_UPDATES}
+ const byKey=new Map();
+ for(const r of updates){
+  if(!r||!/^\d{4}-(05|11)$/.test(r.key)||!Number.isFinite(Number(r.fixed))||!Number.isFinite(Number(r.inflation))||r.key<=DATA_THROUGH)continue;
+  const entry={...r,fixed:Number(r.fixed),inflation:Number(r.inflation)},old=byKey.get(r.key);
+  if(!old||String(entry.modifiedAt||'')>=String(old.modifiedAt||''))byKey.set(r.key,entry);
+ }
+ const sorted=[...byKey.values()].sort((a,b)=>a.key.localeCompare(b.key)),accepted=[];
+ let expected=nextAnnouncementKey(DATA_THROUGH);
+ for(const r of sorted){if(r.key!==expected)break;accepted.push(r);expected=nextAnnouncementKey(expected)}
+ RATE_UPDATES=accepted;return [...RATE_UPDATES];
+}
+function fixedTable(){return [...FIXED_RATES,...RATE_UPDATES.map(r=>[r.key,r.fixed])].sort((a,b)=>a[0].localeCompare(b[0]))}
+function inflationTable(){return [...INFLATION_RATES,...RATE_UPDATES.map(r=>[r.key,r.inflation])].sort((a,b)=>a[0].localeCompare(b[0]))}
+export function rateDataThrough(){return RATE_UPDATES.at(-1)?.key??DATA_THROUGH}
 export function inflationKeyForPeriod(periodStart){
  if(periodStart<'1998-09')return null;
  const [y,m]=periodStart.split('-').map(Number);
@@ -62,12 +84,12 @@ export function inflationKeyForPeriod(periodStart){
 }
 export function inflationAnnouncementForPeriod(periodStart){
  const key=inflationKeyForPeriod(periodStart);if(!key)return null;
- return latestAtOrBefore(INFLATION_RATES,key)?.[1]??null;
+ return latestAtOrBefore(inflationTable(),key)?.[1]??null;
 }
 function periodInfo(issueMonth,periodIndex){
  const fixed=fixedRateForIssue(issueMonth),start=addMonthsKey(issueMonth,periodIndex*6),inflationKey=inflationKeyForPeriod(start);
  const inflation=inflationAnnouncementForPeriod(start);
- return {rate:compositeRate(fixed,inflation),projected:inflationKey>DATA_THROUGH,inflationKey};
+ return {rate:compositeRate(fixed,inflation),projected:inflationKey>rateDataThrough(),inflationKey};
 }
 export function compositeRate(fixed,inflation){
  if(fixed==null||inflation==null)return null;
@@ -111,7 +133,7 @@ export function estimateBond(b,now=new Date()){
 }
 export function currentIssueInfo(now=new Date()){
  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
- const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl),inflationKey=inflationKeyForPeriod(ym),projected=inflationKey>DATA_THROUGH;
+ const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl),inflationKey=inflationKeyForPeriod(ym),dataThrough=rateDataThrough(),projected=inflationKey>dataThrough;
  const nextReset=now.getMonth()+1<11?now.getFullYear()+'-11':(now.getFullYear()+1)+'-05';
- return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough:DATA_THROUGH,projected};
+ return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough,projected};
 }
