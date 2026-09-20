@@ -1,0 +1,1 @@
+{"name":"I Bond Ledger","short_name":"I Bonds","description":"Private local-first Series I savings bond portfolio tracker","start_url":"./","scope":"./","display":"standalone","background_color":"#06120d","theme_color":"#071a12","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
