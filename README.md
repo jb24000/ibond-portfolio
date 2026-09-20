@@ -2,28 +2,49 @@
 
 Private, mobile-first Progressive Web App for manually tracking electronic Series I Savings Bonds.
 
-## v0.1
+## Features
 - BondVault-inspired original dashboard
 - Light / Dark / System appearance
-- IndexedDB persistence and offline PWA shell
-- Add/edit individual I Bond purchases
-- Portfolio principal, estimated value, redeemable value and interest
-- JSON backup/export + restore/import
-- Google Drive appDataFolder sync scaffold with open/manual/change/background sync paths
-- No TreasuryDirect credentials
+- IndexedDB persistence plus persistent-storage request
+- Offline/installable PWA
+- Add, edit and soft-delete individual I Bond purchases
+- Portfolio principal, accrued value, redeemable value and interest
+- Per-bond current rate, redemption eligibility, penalty end and maturity timeline
+- Analytics and timeline views
+- JSON backup/export + atomic restore/import
+- Optional Google Drive appDataFolder synchronization
+- Tombstone-aware per-bond merge
+- No TreasuryDirect credentials or personal portfolio data in GitHub
 
-## Accuracy status
-**The valuation engine is beta.** The current historical rate table is intentionally partial and the valuation/rounding implementation must be audited against TreasuryDirect before financial reliance. TreasuryDirect remains authoritative.
+## Treasury calculations
+Historical fixed and inflation rates are maintained in `ibond.js` from Treasury's official Series I earnings-rate chart, currently through the May 2026 rate period. The engine applies each bond's permanent fixed rate, its six-month inflation schedule, Treasury's composite-rate formula and rounding, the 12-month redemption lock, the three-month interest penalty before five years, and the 30-year maturity cap.
 
-## Google Drive
-Drive sync is intentionally disabled until a Google OAuth Web Client ID is configured in `app.js`. The intended scope is only:
+The app remains an independent estimator. TreasuryDirect is authoritative for redemption values.
+
+## Google Drive setup
+1. Create a Google Cloud project and enable the Google Drive API.
+2. Configure the OAuth consent screen.
+3. Create an OAuth **Web application** client.
+4. Add the deployed GitHub Pages origin as an Authorized JavaScript origin.
+5. In the app, open More → Google Drive sync and paste the OAuth client ID when prompted.
+
+The client ID is stored only on that browser/device. It is not a client secret. The app requests only:
 `https://www.googleapis.com/auth/drive.appdata`
 
-Never commit a Google client secret. Portfolio data is not stored in this repository.
+Browser OAuth access tokens are short-lived. Google may require you to authorize again; the local IndexedDB portfolio remains the primary copy.
 
-## Review priorities
-1. Treasury valuation and rounding
-2. IndexedDB persistence/migrations
-3. Backup integrity
-4. Drive synchronization/conflict handling
-5. PWA update behavior and privacy
+## Deployment
+Enable GitHub Pages for the repository and deploy from the `main` branch/root after the reviewed PR is merged. Open the Pages URL in Chrome on Android and choose **Add to Home screen / Install app**.
+
+## Tests
+```
+npm test
+```
+
+## Security / durability
+- IndexedDB replacement is one atomic transaction.
+- Deleted bonds remain as synchronized tombstones.
+- Cloud records are validated before merge.
+- Service worker caches only same-origin app resources.
+- Backup/restore is available independently of Drive.
+- TreasuryDirect credentials are never requested or stored.
