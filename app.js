@@ -42,7 +42,7 @@ function estimateBond(b,now=new Date()){
  }
  let redeemable=age<12?0:value;
  if(age>=12&&age<60){const idx=Math.max(0,monthlyValues.length-4);redeemable=monthlyValues[idx]}
- return {value,redeemable,interest:value-principal,rate,beta:true,age};
+ return {value,redeemable,interest:value-principal,rate,beta:true,age,unlockDate:addMonths(b.issueMonth,12),penaltyEnd:addMonths(b.issueMonth,60),maturityDate:addMonths(b.issueMonth,360)};
 }
 function snapshot(){return {schemaVersion:1,exportedAt:new Date().toISOString(),bonds}}
 function validBond(b){return b&&typeof b.id==='string'&&typeof b.issueMonth==='string'&&/^\d{4}-\d{2}$/.test(b.issueMonth)&&Number.isFinite(Number(b.amount))&&Number(b.amount)>=25&&typeof b.modifiedAt==='string'}
@@ -56,7 +56,7 @@ function render(){
  $('#empty').hidden=bonds.length>0;const list=$('#bondList');list.innerHTML='';
  data.sort((a,b)=>sortNewest?b.issueMonth.localeCompare(a.issueMonth):a.issueMonth.localeCompare(b.issueMonth)).forEach(b=>{
   const el=document.createElement('article');el.className='bond card';el.innerHTML='<div class="bond-icon">I</div><div><h3></h3><p></p></div><div class="bond-value money"><b></b><small></small></div>';
-  el.querySelector('h3').textContent=b.nickname||'I Bond';el.querySelector('p').textContent=fmtMonth(addMonths(b.issueMonth,0))+' • '+money(b.amount)+' principal';
+  el.querySelector('h3').textContent=b.nickname||'I Bond';el.querySelector('p').textContent=fmtMonth(addMonths(b.issueMonth,0))+' • '+money(b.amount)+' principal'+(b.calc.unsupported?' • valuation pending':' • redeemable '+fmtMonth(b.calc.unlockDate)+' • penalty ends '+fmtMonth(b.calc.penaltyEnd)+' • matures '+fmtMonth(b.calc.maturityDate));
   el.querySelector('.bond-value b').textContent=b.calc.unsupported?'Estimate pending':money(b.calc.value);el.querySelector('.bond-value small').textContent=b.calc.unsupported?'Rate history pending':'+'+money(b.calc.interest);
   el.addEventListener('click',()=>editBond(b));list.appendChild(el);
  });
