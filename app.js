@@ -19,7 +19,10 @@ function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,
 function tx(store,mode='readonly'){return db.transaction(store,mode).objectStore(store)}
 function getAll(){return new Promise((res,rej)=>{const r=tx(STORE).getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 function put(v,store=STORE){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(v);r.onsuccess=()=>res(v);r.onerror=()=>rej(r.error)})}
-function del(id){return new Promise((res,rej)=>{const r=tx(STORE,'readwrite').delete(id);r.onsuccess=res;r.onerror=()=>rej(r.error)})}
+async function del(id){
+ const existing=bonds.find(b=>b.id===id);if(!existing)return;
+ const now=new Date().toISOString();await put({...existing,deletedAt:now,modifiedAt:now});await load();await changed()
+}
 function monthDiff(a,b=new Date()){const [y,m]=a.split('-').map(Number);return (b.getFullYear()-y)*12+(b.getMonth()+1-m)}
 function addMonths(ym,n){let [y,m]=ym.split('-').map(Number);m=m-1+n;return new Date(y+Math.floor(m/12),((m%12)+12)%12,1)}
 function fmtMonth(d){return d.toLocaleDateString('en-US',{month:'short',year:'numeric'})}
@@ -51,12 +54,12 @@ async function replaceBonds(next){if(!Array.isArray(next)||!next.every(validBond
 function mergeBonds(local,cloud){const m=new Map();for(const b of [...local,...cloud]){if(!validBond(b))continue;const old=m.get(b.id);if(!old||b.modifiedAt>old.modifiedAt)m.set(b.id,b)}return [...m.values()]}
 async function load(){bonds=await getAll();render()}
 function render(){
- const data=bonds.map(b=>({...b,calc:estimateBond(b)}));const principal=data.reduce((s,b)=>s+Number(b.amount),0),supported=data.filter(b=>!b.calc.unsupported),value=supported.reduce((s,b)=>s+b.calc.value,0),redeem=supported.reduce((s,b)=>s+b.calc.redeemable,0),hasUnsupported=supported.length!==data.length;
- $('#portfolioValue').textContent=hasUnsupported?'Estimate pending':money(value);$('#principal').textContent=money(principal);$('#redeemable').textContent=hasUnsupported?'Estimate pending':money(redeem);$('#portfolioChange').textContent=hasUnsupported?'Older bond valuation data pending audit':'+'+money(value-principal)+' interest';
- $('#empty').hidden=bonds.length>0;const list=$('#bondList');list.innerHTML='';
+ const active=bonds.filter(b=>!b.deletedAt),data=active.map(b=>({...b,calc:estimateBond(b)}));const principal=data.reduce((s,b)=>s+Number(b.amount),0),supported=data.filter(b=>!b.calc.unsupported),value=supported.reduce((s,b)=>s+b.calc.value,0),redeem=supported.reduce((s,b)=>s+b.calc.redeemable,0),interest=supported.reduce((s,b)=>s+b.calc.interest,0),pending=data.length-supported.length;
+ $('#portfolioValue').textContent=money(value)+(pending?' • '+pending+' pending':'');$('#principal').textContent=money(principal);$('#redeemable').textContent=money(redeem)+(pending?' • '+pending+' pending':'');$('#portfolioChange').textContent='+'+money(interest)+' interest'+(pending?' • '+supported.length+' of '+data.length+' valued':'');
+ $('#empty').hidden=active.length>0;const list=$('#bondList');list.innerHTML='';
  data.sort((a,b)=>sortNewest?b.issueMonth.localeCompare(a.issueMonth):a.issueMonth.localeCompare(b.issueMonth)).forEach(b=>{
   const el=document.createElement('article');el.className='bond card';el.innerHTML='<div class="bond-icon">I</div><div><h3></h3><p></p></div><div class="bond-value money"><b></b><small></small></div>';
-  el.querySelector('h3').textContent=b.nickname||'I Bond';el.querySelector('p').textContent=fmtMonth(addMonths(b.issueMonth,0))+' • '+money(b.amount)+' principal'+(b.calc.unsupported?' • valuation pending':' • redeemable '+fmtMonth(b.calc.unlockDate)+' • penalty ends '+fmtMonth(b.calc.penaltyEnd)+' • matures '+fmtMonth(b.calc.maturityDate));
+  el.querySelector('h3').textContent=b.nickname||'I Bond';el.querySelector('p').textContent=fmtMonth(addMonths(b.issueMonth,0))+' • '+money(b.amount)+' principal'+(b.calc.unsupported?' • valuation pending':' • '+(b.calc.rate*100).toFixed(2)+'% rate • redeemable '+fmtMonth(b.calc.unlockDate)+' • penalty ends '+fmtMonth(b.calc.penaltyEnd)+' • matures '+fmtMonth(b.calc.maturityDate));
   el.querySelector('.bond-value b').textContent=b.calc.unsupported?'Estimate pending':money(b.calc.value);el.querySelector('.bond-value small').textContent=b.calc.unsupported?'Rate history pending':'+'+money(b.calc.interest);
   el.addEventListener('click',()=>editBond(b));list.appendChild(el);
  });
@@ -83,7 +86,7 @@ async function syncDrive(){
    if(bonds.length===0&&cloud.bonds.length){await replaceBonds(cloud.bonds)}
    else{
     const merged=mergeBonds(bonds,cloud.bonds);
-    const localChanged=JSON.stringify(merged)!==JSON.stringify(bonds),cloudChanged=JSON.stringify(merged)!==JSON.stringify(cloud.bonds);
+    const localChanged=!sameBondSet(merged,bonds),cloudChanged=!sameBondSet(merged,cloud.bonds);
     if(localChanged&&cloudChanged&&!confirm('Both this device and Google Drive contain newer changes. Merge both portfolios?')){$('#syncTitle').textContent='Sync unresolved';$('#syncStatus').textContent='No data was overwritten';toast('Sync left unchanged');return}
     if(localChanged)await replaceBonds(merged);
     if(cloudChanged)await uploadDrive(file.id,{schemaVersion:1,exportedAt:new Date().toISOString(),bonds:merged});
