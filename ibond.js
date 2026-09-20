@@ -51,15 +51,23 @@ export function fmtMonthKey(ym){
 export function fixedRateForIssue(issueMonth){
  return latestAtOrBefore(FIXED_RATES,issueMonth)?.[1]??null;
 }
-export function inflationAnnouncementForPeriod(periodStart){
+export const DATA_THROUGH=INFLATION_RATES.at(-1)[0];
+export function inflationKeyForPeriod(periodStart){
  if(periodStart<'1998-09')return null;
  const [y,m]=periodStart.split('-').map(Number);
- let key;
- if(y===1998&&(m===9||m===10)) key='1998-09';
- else if(m>=5&&m<=10) key=y+'-05';
- else if(m>=11) key=y+'-11';
- else key=(y-1)+'-11';
+ if(y===1998&&(m===9||m===10))return '1998-09';
+ if(m>=5&&m<=10)return y+'-05';
+ if(m>=11)return y+'-11';
+ return (y-1)+'-11';
+}
+export function inflationAnnouncementForPeriod(periodStart){
+ const key=inflationKeyForPeriod(periodStart);if(!key)return null;
  return latestAtOrBefore(INFLATION_RATES,key)?.[1]??null;
+}
+function periodInfo(issueMonth,periodIndex){
+ const fixed=fixedRateForIssue(issueMonth),start=addMonthsKey(issueMonth,periodIndex*6),inflationKey=inflationKeyForPeriod(start);
+ const inflation=inflationAnnouncementForPeriod(start);
+ return {rate:compositeRate(fixed,inflation),projected:inflationKey>DATA_THROUGH,inflationKey};
 }
 export function compositeRate(fixed,inflation){
  if(fixed==null||inflation==null)return null;
@@ -67,33 +75,28 @@ export function compositeRate(fixed,inflation){
  return Math.max(0,Math.round(raw*10000)/10000);
 }
 function roundCent(n){return Math.round((n+Number.EPSILON)*100)/100}
-export function rateForBondPeriod(issueMonth,periodIndex){
- const fixed=fixedRateForIssue(issueMonth);
- const start=addMonthsKey(issueMonth,periodIndex*6);
- const inflation=inflationAnnouncementForPeriod(start);
- return compositeRate(fixed,inflation);
-}
+export function rateForBondPeriod(issueMonth,periodIndex){return periodInfo(issueMonth,periodIndex).rate}
 export function valueAtMonths(principal,issueMonth,months){
  const fixed=fixedRateForIssue(issueMonth);
  if(fixed==null)return {supported:false,value:null,rate:null};
- let pv=Number(principal),elapsed=0,capped=Math.max(0,Math.min(360,months));
+ let pv=Number(principal),elapsed=0,capped=Math.max(0,Math.min(360,months)),projected=false;
  if(!Number.isFinite(pv)||pv<=0)return {supported:false,value:null,rate:null};
  while(elapsed<capped){
-  const periodIndex=Math.floor(elapsed/6),rate=rateForBondPeriod(issueMonth,periodIndex);
-  if(rate==null)return {supported:false,value:null,rate:null};
+  const periodIndex=Math.floor(elapsed/6),info=periodInfo(issueMonth,periodIndex),rate=info.rate;projected||=info.projected;
+  if(rate==null)return {supported:false,value:null,rate:null,projected};
   const m=Math.min(6,capped-elapsed);
   const fv=roundCent(pv*Math.pow(1+(rate/2),m/6));
-  if(m<6)return {supported:true,value:fv,rate};
+  if(m<6)return {supported:true,value:fv,rate,projected};
   pv=fv;elapsed+=6;
  }
- const rate=rateForBondPeriod(issueMonth,Math.floor(Math.min(capped,359)/6));
- return {supported:rate!=null,value:pv,rate};
+ const info=periodInfo(issueMonth,Math.floor(Math.min(capped,359)/6));projected||=info.projected;
+ return {supported:info.rate!=null,value:pv,rate:info.rate,projected};
 }
 export function estimateBond(b,now=new Date()){
  const principal=Number(b.amount),age=Math.min(360,monthDiff(b.issueMonth,now));
  const accrued=valueAtMonths(principal,b.issueMonth,age);
  if(!accrued.supported)return {unsupported:true,value:null,redeemable:null,interest:null,rate:null,age};
- const currentRate=rateForBondPeriod(b.issueMonth,Math.floor(Math.min(age,359)/6));
+ const currentInfo=periodInfo(b.issueMonth,Math.floor(Math.min(age,359)/6)),currentRate=currentInfo.rate;
  let redeemable=0;
  if(age>=12){
   const redeemMonths=age<60?Math.max(0,age-3):age;
@@ -102,13 +105,13 @@ export function estimateBond(b,now=new Date()){
   redeemable=Math.max(principal,r.value);
  }
  return {
-  unsupported:false,value:accrued.value,redeemable,interest:roundCent(accrued.value-principal),rate:currentRate,age,
+  unsupported:false,value:accrued.value,redeemable,interest:roundCent(accrued.value-principal),rate:currentRate,projected:accrued.projected||currentInfo.projected,age,
   unlockDate:addMonthsKey(b.issueMonth,12),penaltyEnd:addMonthsKey(b.issueMonth,60),maturityDate:addMonthsKey(b.issueMonth,360)
  };
 }
 export function currentIssueInfo(now=new Date()){
  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
- const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl);
+ const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl),inflationKey=inflationKeyForPeriod(ym),projected=inflationKey>DATA_THROUGH;
  const nextReset=now.getMonth()+1<11?now.getFullYear()+'-11':(now.getFullYear()+1)+'-05';
- return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough:'2026-05'};
+ return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough:DATA_THROUGH,projected};
 }
