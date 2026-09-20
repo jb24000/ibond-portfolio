@@ -49,9 +49,16 @@ export function fmtMonthKey(ym){
  return monthDate(ym).toLocaleDateString('en-US',{month:'short',year:'numeric'});
 }
 export function fixedRateForIssue(issueMonth){
- return latestAtOrBefore(FIXED_RATES,issueMonth)?.[1]??null;
+ return latestAtOrBefore(fixedTable(),issueMonth)?.[1]??null;
 }
 export const DATA_THROUGH=INFLATION_RATES.at(-1)[0];
+let RATE_UPDATES=[];
+export function setRateUpdates(updates=[]){
+ RATE_UPDATES=Array.isArray(updates)?updates.filter(r=>r&&/^\d{4}-(05|11)$/.test(r.key)&&Number.isFinite(Number(r.fixed))&&Number.isFinite(Number(r.inflation))).map(r=>({...r,fixed:Number(r.fixed),inflation:Number(r.inflation)})):[];
+}
+function fixedTable(){return [...FIXED_RATES,...RATE_UPDATES.map(r=>[r.key,r.fixed])].sort((a,b)=>a[0].localeCompare(b[0]))}
+function inflationTable(){return [...INFLATION_RATES,...RATE_UPDATES.map(r=>[r.key,r.inflation])].sort((a,b)=>a[0].localeCompare(b[0]))}
+export function rateDataThrough(){return inflationTable().at(-1)?.[0]??DATA_THROUGH}
 export function inflationKeyForPeriod(periodStart){
  if(periodStart<'1998-09')return null;
  const [y,m]=periodStart.split('-').map(Number);
@@ -62,12 +69,12 @@ export function inflationKeyForPeriod(periodStart){
 }
 export function inflationAnnouncementForPeriod(periodStart){
  const key=inflationKeyForPeriod(periodStart);if(!key)return null;
- return latestAtOrBefore(INFLATION_RATES,key)?.[1]??null;
+ return latestAtOrBefore(inflationTable(),key)?.[1]??null;
 }
 function periodInfo(issueMonth,periodIndex){
  const fixed=fixedRateForIssue(issueMonth),start=addMonthsKey(issueMonth,periodIndex*6),inflationKey=inflationKeyForPeriod(start);
  const inflation=inflationAnnouncementForPeriod(start);
- return {rate:compositeRate(fixed,inflation),projected:inflationKey>DATA_THROUGH,inflationKey};
+ return {rate:compositeRate(fixed,inflation),projected:inflationKey>rateDataThrough(),inflationKey};
 }
 export function compositeRate(fixed,inflation){
  if(fixed==null||inflation==null)return null;
@@ -111,7 +118,7 @@ export function estimateBond(b,now=new Date()){
 }
 export function currentIssueInfo(now=new Date()){
  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
- const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl),inflationKey=inflationKeyForPeriod(ym),projected=inflationKey>DATA_THROUGH;
+ const fixed=fixedRateForIssue(ym),infl=inflationAnnouncementForPeriod(ym),rate=compositeRate(fixed,infl),inflationKey=inflationKeyForPeriod(ym),dataThrough=rateDataThrough(),projected=inflationKey>dataThrough;
  const nextReset=now.getMonth()+1<11?now.getFullYear()+'-11':(now.getFullYear()+1)+'-05';
- return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough:DATA_THROUGH,projected};
+ return {issueMonth:ym,fixed,inflation:infl,rate,nextReset,dataThrough,projected};
 }
