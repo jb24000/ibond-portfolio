@@ -53,12 +53,27 @@ export function fixedRateForIssue(issueMonth){
 }
 export const DATA_THROUGH=INFLATION_RATES.at(-1)[0];
 let RATE_UPDATES=[];
+function nextAnnouncementKey(key){
+ const [y,m]=key.split('-').map(Number);
+ return m===5?y+'-11':(y+1)+'-05';
+}
+export function nextRatePeriod(){return nextAnnouncementKey(rateDataThrough())}
 export function setRateUpdates(updates=[]){
- RATE_UPDATES=Array.isArray(updates)?updates.filter(r=>r&&/^\d{4}-(05|11)$/.test(r.key)&&Number.isFinite(Number(r.fixed))&&Number.isFinite(Number(r.inflation))).map(r=>({...r,fixed:Number(r.fixed),inflation:Number(r.inflation)})):[];
+ if(!Array.isArray(updates)){RATE_UPDATES=[];return RATE_UPDATES}
+ const byKey=new Map();
+ for(const r of updates){
+  if(!r||!/^\d{4}-(05|11)$/.test(r.key)||!Number.isFinite(Number(r.fixed))||!Number.isFinite(Number(r.inflation))||r.key<=DATA_THROUGH)continue;
+  const entry={...r,fixed:Number(r.fixed),inflation:Number(r.inflation)},old=byKey.get(r.key);
+  if(!old||String(entry.modifiedAt||'')>=String(old.modifiedAt||''))byKey.set(r.key,entry);
+ }
+ const sorted=[...byKey.values()].sort((a,b)=>a.key.localeCompare(b.key)),accepted=[];
+ let expected=nextAnnouncementKey(DATA_THROUGH);
+ for(const r of sorted){if(r.key!==expected)break;accepted.push(r);expected=nextAnnouncementKey(expected)}
+ RATE_UPDATES=accepted;return [...RATE_UPDATES];
 }
 function fixedTable(){return [...FIXED_RATES,...RATE_UPDATES.map(r=>[r.key,r.fixed])].sort((a,b)=>a[0].localeCompare(b[0]))}
 function inflationTable(){return [...INFLATION_RATES,...RATE_UPDATES.map(r=>[r.key,r.inflation])].sort((a,b)=>a[0].localeCompare(b[0]))}
-export function rateDataThrough(){return inflationTable().at(-1)?.[0]??DATA_THROUGH}
+export function rateDataThrough(){return RATE_UPDATES.at(-1)?.key??DATA_THROUGH}
 export function inflationKeyForPeriod(periodStart){
  if(periodStart<'1998-09')return null;
  const [y,m]=periodStart.split('-').map(Number);
