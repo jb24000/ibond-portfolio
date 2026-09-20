@@ -48,10 +48,18 @@ function estimateBond(b,now=new Date()){
  return {value,redeemable,interest:value-principal,rate,beta:true,age,unlockDate:addMonths(b.issueMonth,12),penaltyEnd:addMonths(b.issueMonth,60),maturityDate:addMonths(b.issueMonth,360)};
 }
 function snapshot(){return {schemaVersion:1,exportedAt:new Date().toISOString(),bonds}}
-function validBond(b){return b&&typeof b.id==='string'&&typeof b.issueMonth==='string'&&/^\d{4}-\d{2}$/.test(b.issueMonth)&&Number.isFinite(Number(b.amount))&&Number(b.amount)>=25&&typeof b.modifiedAt==='string'}
-async function clearBonds(){return new Promise((res,rej)=>{const r=tx(STORE,'readwrite').clear();r.onsuccess=res;r.onerror=()=>rej(r.error)})}
-async function replaceBonds(next){if(!Array.isArray(next)||!next.every(validBond))throw Error('Invalid portfolio data');await clearBonds();for(const b of next)await put(b);await load()}
-function mergeBonds(local,cloud){const m=new Map();for(const b of [...local,...cloud]){if(!validBond(b))continue;const old=m.get(b.id);if(!old||b.modifiedAt>old.modifiedAt)m.set(b.id,b)}return [...m.values()]}
+function validBond(b){return b&&typeof b.id==='string'&&typeof b.issueMonth==='string'&&/^\d{4}-\d{2}$/.test(b.issueMonth)&&Number.isFinite(Number(b.amount))&&Number(b.amount)>=25&&typeof b.modifiedAt==='string'&&(!b.deletedAt||typeof b.deletedAt==='string')}
+async function replaceBonds(next){
+ if(!Array.isArray(next)||!next.every(validBond))throw Error('Invalid portfolio data');
+ await new Promise((res,rej)=>{const t=db.transaction(STORE,'readwrite'),s=t.objectStore(STORE);s.clear();for(const b of next)s.put(b);t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||Error('Portfolio write aborted'))});
+ await load()
+}
+function mergeBonds(local,cloud){
+ const invalid=[...local,...cloud].filter(b=>!validBond(b));if(invalid.length)throw Error(invalid.length+' invalid bond record(s); sync stopped');
+ const m=new Map();for(const b of [...local,...cloud]){const old=m.get(b.id);if(!old||b.modifiedAt>old.modifiedAt)m.set(b.id,b)}return [...m.values()]
+}
+function canonicalBonds(items){return [...items].sort((a,b)=>a.id.localeCompare(b.id)).map(b=>JSON.stringify(b)).join('\n')}
+function sameBondSet(a,b){return canonicalBonds(a)===canonicalBonds(b)}
 async function load(){bonds=await getAll();render()}
 function render(){
  const active=bonds.filter(b=>!b.deletedAt),data=active.map(b=>({...b,calc:estimateBond(b)}));const principal=data.reduce((s,b)=>s+Number(b.amount),0),supported=data.filter(b=>!b.calc.unsupported),value=supported.reduce((s,b)=>s+b.calc.value,0),redeem=supported.reduce((s,b)=>s+b.calc.redeemable,0),interest=supported.reduce((s,b)=>s+b.calc.interest,0),pending=data.length-supported.length;
