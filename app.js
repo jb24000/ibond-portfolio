@@ -37,13 +37,13 @@ function render(){
  $('#portfolioValue').textContent=money(value)+(pending?' • '+pending+' pending':'');
  $('#principal').textContent=money(principal);$('#redeemable').textContent=money(redeem)+(pending?' • '+pending+' pending':'');
  $('#portfolioChange').textContent=(interest>=0?'+':'')+money(interest)+' interest'+(pending?' • '+supported.length+' of '+data.length+' valued':'');
- const info=currentIssueInfo();$('#rateBadge').textContent=info.rate==null?'Rate data unavailable':'Current issue '+(info.rate*100).toFixed(2)+'%';
+ const info=currentIssueInfo();$('#rateBadge').textContent=info.rate==null?'Rate data unavailable':(info.projected?'~'+(info.rate*100).toFixed(2)+'% unconfirmed • data through '+fmtMonthKey(info.dataThrough):'Current issue '+(info.rate*100).toFixed(2)+'%');
  $('#empty').hidden=active.length>0;const list=$('#bondList');list.innerHTML='';
  data.sort((a,b)=>sortNewest?b.issueMonth.localeCompare(a.issueMonth):a.issueMonth.localeCompare(b.issueMonth)).forEach(b=>{
   const el=document.createElement('article');el.className='bond card';
   el.innerHTML='<div class="bond-icon">I</div><div><h3></h3><p></p></div><div class="bond-value money"><b></b><small></small></div>';
   el.querySelector('h3').textContent=b.nickname||'I Bond';
-  el.querySelector('p').textContent=fmtMonthKey(b.issueMonth)+' • '+money(b.amount)+' principal'+(b.calc.unsupported?' • valuation pending':' • '+(b.calc.rate*100).toFixed(2)+'% rate • redeemable '+fmtMonthKey(b.calc.unlockDate)+' • penalty ends '+fmtMonthKey(b.calc.penaltyEnd));
+  el.querySelector('p').textContent=fmtMonthKey(b.issueMonth)+' • '+money(b.amount)+' principal'+(b.calc.unsupported?' • valuation pending':' • '+(b.calc.rate*100).toFixed(2)+'% rate'+(b.calc.projected?' (unconfirmed)':'')+' • redeemable '+fmtMonthKey(b.calc.unlockDate)+' • penalty ends '+fmtMonthKey(b.calc.penaltyEnd));
   el.querySelector('.bond-value b').textContent=b.calc.unsupported?'Estimate pending':money(b.calc.value);
   el.querySelector('.bond-value small').textContent=b.calc.unsupported?'Rate data pending':'+'+money(b.calc.interest);
   el.addEventListener('click',()=>editBond(b));list.appendChild(el);
@@ -124,7 +124,8 @@ async function init(){
  $('#themeBtn').onclick=()=>$('#themeDialog').showModal();$('#appearanceBtn').onclick=()=>$('#themeDialog').showModal();$('.close-theme').onclick=()=>$('#themeDialog').close();document.querySelectorAll('[data-theme]').forEach(x=>x.onclick=()=>{applyTheme(x.dataset.theme);$('#themeDialog').close()});
  $('#exportBtn').onclick=exportBackup;$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
  $('#driveBtn').onclick=requestSync;$('#syncBtn').onclick=requestSync;
- setTimeout(()=>{if(googleClientId())initDrive()},1200);
+ const lastSync=await getMeta('lastSync');if(lastSync){$('#syncTitle').textContent='Last synced';$('#syncStatus').textContent='Google Drive • '+new Date(lastSync).toLocaleString()}
+ setTimeout(()=>{if(googleClientId()&&initDrive())tokenClient.requestAccessToken({prompt:''})},1200);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&accessToken)syncDrive()});
 }
 init();
