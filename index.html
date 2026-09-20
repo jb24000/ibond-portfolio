@@ -11,10 +11,10 @@
 <header><div><div class="eyebrow">U.S. SAVINGS BONDS</div><h1>I Bond Ledger</h1></div><div class="header-actions"><button id="themeBtn" class="icon-btn" aria-label="Change theme">◐</button><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button></div></header>
 <main>
 <section class="hero card">
-<div class="hero-top"><span>Portfolio Value <button id="hideBtn" class="ghost">◉</button></span><span id="rateBadge" class="badge">Current issue 4.26%</span></div>
-<div id="portfolioValue" class="big">$0.00</div>
-<div id="portfolioChange" class="gain">+$0.00 interest</div>
-<div class="metric-grid"><div><span>Principal</span><strong id="principal">$0.00</strong></div><div><span>Redeemable today</span><strong id="redeemable">$0.00</strong></div></div>
+<div class="hero-top"><span>Portfolio Value <button id="hideBtn" class="ghost">◉</button></span><span id="rateBadge" class="badge">Rate data: beta</span></div>
+<div id="portfolioValue" class="big money">$0.00</div>
+<div id="portfolioChange" class="gain money">+$0.00 interest</div>
+<div class="metric-grid"><div><span>Principal</span><strong id="principal" class="money">$0.00</strong></div><div><span>Redeemable today</span><strong id="redeemable" class="money">$0.00</strong></div></div>
 </section>
 <section class="section-head"><h2>Your I Bonds</h2><button id="sortBtn" class="ghost">Newest first</button></section>
 <div id="bondList" class="bond-list"></div>
@@ -29,13 +29,13 @@
 <label>Nickname<input id="nickname" maxlength="40" placeholder="e.g. Inflation Hedge"></label>
 <label>Issue month<input id="issueMonth" type="month" min="1998-09" required></label>
 <label>Purchase amount<input id="amount" type="number" min="25" max="10000" step="0.01" inputmode="decimal" required></label>
-<input id="editId" type="hidden"><div class="dialog-actions"><button type="button" class="secondary close">Cancel</button><button class="primary" value="default">Save Bond</button></div></form></dialog>
+<input id="editId" type="hidden"><div class="dialog-actions"><button id="deleteBtn" type="button" class="danger" hidden>Delete</button><span class="spacer"></span><button type="button" class="secondary close">Cancel</button><button class="primary" value="default">Save Bond</button></div></form></dialog>
 <dialog id="moreDialog"><div class="dialog-head"><h2>Portfolio & Data</h2><button class="icon-btn close-more">×</button></div>
 <div class="settings-list">
 <button id="exportBtn">Export backup <span>›</span></button><label class="file-button">Import backup<input id="importFile" type="file" accept="application/json"><span>›</span></label>
 <button id="driveBtn">Google Drive sync <span id="driveState">Set up</span></button><button id="appearanceBtn">Appearance <span id="appearanceState">System</span></button>
 </div><p class="fine">Google Drive sync requires a Google OAuth client ID. The app requests only Drive app-data access; TreasuryDirect credentials are never requested.</p></dialog>
-<dialog id="themeDialog"><div class="dialog-head"><h2>Appearance</h2><button class="icon-btn close-theme">×</button></div><div class="theme-options"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div></dialog>
+<dialog id="themeDialog"><div class="dialog-head"><h2>Appearance</h2><button class="icon-btn close-theme">×</button></div><div class="theme-options"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div></dialog><dialog id="analyticsDialog"><div class="dialog-head"><h2>Analytics</h2><button class="icon-btn close-panel">×</button></div><div id="analyticsBody"></div></dialog><dialog id="timelineDialog"><div class="dialog-head"><h2>Bond Timeline</h2><button class="icon-btn close-panel">×</button></div><div id="timelineBody"></div></dialog>
 <div id="toast" role="status"></div>
 <script src="https://accounts.google.com/gsi/client" async defer></script><script type="module" src="./app.js"></script>
 </body></html>
