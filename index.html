@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#071a12"><meta name="description" content="Private local-first Series I savings bond portfolio tracker">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css">
+<title>I Bond Ledger</title>
+</head>
+<body>
+<div id="app">
+<header><div><div class="eyebrow">U.S. SAVINGS BONDS</div><h1>I Bond Ledger</h1></div><div class="header-actions"><button id="themeBtn" class="icon-btn" aria-label="Change theme">◐</button><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button></div></header>
+<main>
+<section class="hero card">
+<div class="hero-top"><span>Portfolio Value <button id="hideBtn" class="ghost">◉</button></span><span id="rateBadge" class="badge">Current issue 4.26%</span></div>
+<div id="portfolioValue" class="big">$0.00</div>
+<div id="portfolioChange" class="gain">+$0.00 interest</div>
+<div class="metric-grid"><div><span>Principal</span><strong id="principal">$0.00</strong></div><div><span>Redeemable today</span><strong id="redeemable">$0.00</strong></div></div>
+</section>
+<section class="section-head"><h2>Your I Bonds</h2><button id="sortBtn" class="ghost">Newest first</button></section>
+<div id="bondList" class="bond-list"></div>
+<div id="empty" class="empty card"><div class="coin">I</div><h3>No bonds yet</h3><p>Add each TreasuryDirect purchase once. Your portfolio stays on this device and can be backed up or synced.</p></div>
+<button id="addBtn" class="add"><span>＋</span><b>Add I Bond</b><small>Record a TreasuryDirect purchase</small></button>
+<section class="sync card"><div><span class="sync-dot"></span><b id="syncTitle">Stored locally</b><small id="syncStatus">Your portfolio is available offline.</small></div><button id="syncBtn" class="secondary">Sync</button></section>
+<p class="disclaimer">Independent portfolio tracker. Not affiliated with the U.S. Department of the Treasury. Values are estimates; TreasuryDirect is authoritative.</p>
+</main>
+<nav><button data-tab="home" class="active">⌂<span>Home</span></button><button data-tab="analytics">▥<span>Analytics</span></button><button data-tab="timeline">◷<span>Timeline</span></button><button data-tab="more">•••<span>More</span></button></nav>
+</div>
+<dialog id="bondDialog"><form id="bondForm" method="dialog"><div class="dialog-head"><h2 id="dialogTitle">Add I Bond</h2><button type="button" class="icon-btn close">×</button></div>
+<label>Nickname<input id="nickname" maxlength="40" placeholder="e.g. Inflation Hedge"></label>
+<label>Issue month<input id="issueMonth" type="month" min="1998-09" required></label>
+<label>Purchase amount<input id="amount" type="number" min="25" max="10000" step="0.01" inputmode="decimal" required></label>
+<input id="editId" type="hidden"><div class="dialog-actions"><button type="button" class="secondary close">Cancel</button><button class="primary" value="default">Save Bond</button></div></form></dialog>
+<dialog id="moreDialog"><div class="dialog-head"><h2>Portfolio & Data</h2><button class="icon-btn close-more">×</button></div>
+<div class="settings-list">
+<button id="exportBtn">Export backup <span>›</span></button><label class="file-button">Import backup<input id="importFile" type="file" accept="application/json"><span>›</span></label>
+<button id="driveBtn">Google Drive sync <span id="driveState">Set up</span></button><button id="appearanceBtn">Appearance <span id="appearanceState">System</span></button>
+</div><p class="fine">Google Drive sync requires a Google OAuth client ID. The app requests only Drive app-data access; TreasuryDirect credentials are never requested.</p></dialog>
+<dialog id="themeDialog"><div class="dialog-head"><h2>Appearance</h2><button class="icon-btn close-theme">×</button></div><div class="theme-options"><button data-theme="system">System</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div></dialog>
+<div id="toast" role="status"></div>
+<script src="https://accounts.google.com/gsi/client" async defer></script><script type="module" src="./app.js"></script>
+</body></html>
