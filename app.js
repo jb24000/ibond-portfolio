@@ -2,6 +2,7 @@ import {estimateBond,fmtMonthKey,currentIssueInfo,setRateUpdates,nextRatePeriod}
 
 const DB_NAME='ibond-ledger',DB_VERSION=1,STORE='bonds',META='meta';
 const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const GOOGLE_CLIENT_ID='833599244995-si767imruqfvnulr7e16ifqpoeccmoja.apps.googleusercontent.com';
 const $=s=>document.querySelector(s);
 const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n||0);
 let db,bonds=[],rateUpdates=[],sortNewest=true,tokenClient=null,accessToken=null;
@@ -72,7 +73,7 @@ async function importBackup(file){const data=JSON.parse(await file.text());if(![
 async function getMeta(key){return new Promise((res,rej)=>{const r=tx(META).get(key);r.onsuccess=()=>res(r.result?.value);r.onerror=()=>rej(r.error)})}
 async function setMeta(key,value){return put({key,value},META)}
 
-function googleClientId(){return localStorage.getItem('googleClientId')||''}
+function googleClientId(){return GOOGLE_CLIENT_ID}
 function driveReady(){return googleClientId()&&window.google?.accounts?.oauth2}
 function initDrive(){
  if(!driveReady())return false;
@@ -101,7 +102,6 @@ async function syncDrive(){
  }catch(e){$('#syncTitle').textContent='Sync needs attention';$('#syncStatus').textContent=e.message;toast('Sync failed')}
 }
 function requestSync(){
- if(!googleClientId()){const id=prompt('Paste your Google OAuth Web Client ID. This is not a secret and stays on this device.');if(!id)return;localStorage.setItem('googleClientId',id.trim());$('#driveState').textContent='Configured'}
  if(!initDrive())return toast('Google sign-in is still loading');
  tokenClient.requestAccessToken({prompt:accessToken?'':'consent'});
 }
