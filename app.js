@@ -99,7 +99,7 @@ async function exportSnowballCsv(mode){
  const pending=await getMeta('snowballPending');if(pending&&mode!=='prices')return toast('Resolve the pending Snowball import first');
  if(mode==='full'&&!confirm('Only import this into an empty Snowball portfolio, or Buy rows will duplicate. Continue?'))return;
  if(mode==='incremental'&&!active.some(b=>b.snowball)){if(confirm('Are these purchases already in your Snowball portfolio?')){await stampSnowball(active.map(b=>b.id));toast('Existing purchases marked as imported');return}toast('Use Full history into an EMPTY Snowball portfolio');return}
- const drift=snowballDrift(),blocked=driftTickers(drift);if(drift.length)showSnowballDrift(drift);
+ const drift=snowballDrift(),blocked=driftTickers(drift);if(drift.length){showSnowballDrift(drift);toast('These purchases changed after import. Fix them manually in Snowball: '+[...blocked].join(', '))}
  const {rows,buyIds,unsupportedTickers}=snowballRows(mode,blocked),csv=[SNOWBALL_HEADERS,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a'),date=localDateKey();a.href=URL.createObjectURL(blob);a.download='ibond-snowball-'+mode+'-'+date+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
  if((mode==='full'||mode==='incremental')&&buyIds.length){await setMeta('snowballPending',{file:a.download,ids:buyIds,createdAt:Date.now()});await renderSnowballPending()}
