@@ -12,6 +12,11 @@ Private, mobile-first Progressive Web App for manually tracking electronic Serie
 - Per-bond current rate, redemption eligibility, penalty end and maturity timeline
 - Analytics and timeline views
 - JSON backup/export + atomic restore/import
+- Snowball Analytics CSV export with full-history and prices-only modes
+- Snowball tickers use one shared `IB-YYYY-MM` format per issue month. Full history exports each purchase as a Buy at $1.00 plus one aggregated current-price row per issue-month ticker; prices-only exports only the current-price rows for safe recurring updates.
+- Snowball price rows use the app's full accrued value (`estimateBond().value`) divided by total invested for that issue month. They do not use the early-redemption value net of the three-month penalty (`estimateBond().redeemable`).
+- The tracker does not currently model redeemed or partially redeemed holdings. Deleted/inactive records are excluded from Snowball exports; record redemptions outside this tracker until redemption accounting is implemented.
+- Snowball CSV is created entirely in the browser and downloaded locally; it is not uploaded by the export function. Notes are fixed non-sensitive labels and user-entered text is not exported.
 - Optional Google Drive appDataFolder synchronization
 - Tombstone-aware per-bond merge
 - No TreasuryDirect credentials or personal portfolio data in GitHub
