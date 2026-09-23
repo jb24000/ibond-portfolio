@@ -69,20 +69,32 @@ function editBond(b){$('#dialogTitle').textContent='Edit I Bond';$('#editId').va
 function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 function applyTheme(v){if(!['light','dark','system'].includes(v))return;localStorage.setItem('theme',v);if(v==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',v);$('#appearanceState').textContent=v[0].toUpperCase()+v.slice(1)}
 async function exportBackup(){const blob=new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ibond-ledger-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);toast('Backup exported')}
-function csvCell(v){const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
-function exportCsv(){
- const exportedAt=new Date().toISOString(),active=bonds.filter(b=>!b.deletedAt);
- if(!active.length)return toast('No bonds to export');
- const headers=['Nickname','Series','Issue Month','Purchase Amount','Estimated Value','Redeemable Today','Accrued Interest','Composite Rate','Redemption Eligible','Penalty Ends','Maturity','Valuation Status','Exported At'];
- const rows=active.map(b=>{const c=estimateBond(b),supported=!c.unsupported;return [
-  b.nickname||'I Bond','Series I',b.issueMonth,Number(b.amount).toFixed(2),
-  supported?c.value.toFixed(2):'',supported?c.redeemable.toFixed(2):'',supported?c.interest.toFixed(2):'',
-  supported?(c.rate*100).toFixed(2)+'%':'',supported?c.unlockDate:'',supported?c.penaltyEnd:'',supported?c.maturityDate:'',
-  supported?'Estimated':'Rate data pending',exportedAt
- ]});
- const csv=[headers,...rows].map(r=>r.map(csvCell).join(',')).join('\n');
- const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
- a.href=URL.createObjectURL(blob);a.download='ibond-ledger-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);toast('CSV exported');
+const SNOWBALL_HEADERS=['Event','Date','Symbol','Price','Quantity','Currency','FeeTax','Exchange','Note'];
+function issueTicker(issueMonth){return 'IB-'+issueMonth}
+function localDateKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function issueDate(issueMonth){return issueMonth+'-01'}
+function safeCsvText(v){const s=String(v??'');return /^[=+\-@]/.test(s)?"'"+s:s}
+function csvCell(v){const s=safeCsvText(v);return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function snowballRows(mode){
+ const active=bonds.filter(b=>!b.deletedAt),byIssue=new Map();
+ for(const b of active){const ticker=issueTicker(b.issueMonth),group=byIssue.get(ticker)||{issueMonth:b.issueMonth,bonds:[]};group.bonds.push(b);byIssue.set(ticker,group)}
+ const rows=[];
+ for(const [ticker,g] of [...byIssue.entries()].sort((a,b)=>a[1].issueMonth.localeCompare(b[1].issueMonth))){
+  if(mode==='full')for(const b of g.bonds)rows.push(['Buy',issueDate(b.issueMonth),ticker,'1.00',Number(b.amount).toFixed(2),'USD','0','CUSTOM_HOLDING','Series I Savings Bond']);
+  const valued=g.bonds.map(b=>({b,c:estimateBond(b)}));
+  if(valued.some(x=>x.c.unsupported))continue;
+  const invested=valued.reduce((s,x)=>s+Number(x.b.amount),0);
+  // Price tracks the app's full accrued value (calc.value), not redeemable/net-of-penalty value (calc.redeemable).
+  const currentValue=valued.reduce((s,x)=>s+x.c.value,0),price=(currentValue/invested).toFixed(6);
+  rows.push(['CUSTOM_HOLDING_PRICE',localDateKey(),ticker,price,'','USD','0','CUSTOM_HOLDING','Series I Savings Bond']);
+ }
+ return rows;
+}
+function exportSnowballCsv(mode){
+ if(!bonds.some(b=>!b.deletedAt))return toast('No bonds to export');
+ const rows=snowballRows(mode),csv=[SNOWBALL_HEADERS,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a'),date=localDateKey();
+ a.href=URL.createObjectURL(blob);a.download='ibond-snowball-'+mode+'-'+date+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Snowball CSV exported');
 }
 async function importBackup(file){const data=JSON.parse(await file.text());if(![1,2].includes(data.schemaVersion)||!Array.isArray(data.bonds)||!data.bonds.every(validBond))throw Error('Unsupported or invalid backup');if(!confirm('Restore will replace the portfolio on this device. Continue?'))return;await replaceBonds(data.bonds);if(Array.isArray(data.rateUpdates)){rateUpdates=setRateUpdates(data.rateUpdates);await setMeta('rateUpdates',rateUpdates)}await changed();render();toast('Portfolio restored')}
 async function getMeta(key){return new Promise((res,rej)=>{const r=tx(META).get(key);r.onsuccess=()=>res(r.result?.value);r.onerror=()=>rej(r.error)})}
@@ -137,7 +149,7 @@ async function init(){
  document.querySelector('[data-tab="analytics"]').onclick=()=>$('#analyticsDialog').showModal();document.querySelector('[data-tab="timeline"]').onclick=()=>$('#timelineDialog').showModal();
  document.querySelectorAll('.close-panel').forEach(x=>x.onclick=()=>x.closest('dialog').close());
  $('#themeBtn').onclick=()=>$('#themeDialog').showModal();$('#appearanceBtn').onclick=()=>$('#themeDialog').showModal();$('.close-theme').onclick=()=>$('#themeDialog').close();document.querySelectorAll('.theme-options [data-theme]').forEach(x=>x.onclick=()=>{applyTheme(x.dataset.theme);$('#themeDialog').close()});
- $('#exportBtn').onclick=exportBackup;$('#exportCsvBtn').onclick=exportCsv;$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
+ $('#exportBtn').onclick=exportBackup;$('#exportCsvFullBtn').onclick=()=>exportSnowballCsv('full');$('#exportCsvPricesBtn').onclick=()=>exportSnowballCsv('prices');$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
  $('#driveBtn').onclick=requestSync;$('#syncBtn').onclick=requestSync;
  $('#rateUpdateBtn').onclick=()=>{$('#ratePeriod').value=nextRatePeriod();$('#rateDialog').showModal()};
  document.querySelectorAll('.close-rate').forEach(x=>x.onclick=()=>$('#rateDialog').close());
