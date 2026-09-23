@@ -94,6 +94,27 @@ async function migrateSnowballExportState(){const old=await getMeta('snowballExp
 async function renderSnowballPending(){const p=await getMeta('snowballPending'),el=$('#snowballPending');if(!el)return;if(!p){el.hidden=true;return}el.hidden=false;$('#snowballPendingText').textContent='Did you import '+p.file+' into Snowball?';$('#snowballPendingYes').textContent='Yes, mark '+p.ids.length+' purchases as imported'}
 async function resolveSnowballPending(action){const p=await getMeta('snowballPending');if(!p)return;if(action==='yes')await stampSnowball(p.ids);if(action!=='notyet'){await deleteMeta('snowballPending');await renderSnowballPending()}else toast('Pending Snowball import kept')}
 function showSnowballDrift(drift){const box=$('#snowballDriftList');box.innerHTML='';for(const b of drift){const old=b.snowball,newTicker=b.deletedAt?'deleted':issueTicker(b.issueMonth),row=document.createElement('div');row.className='drift-row';const detail=b.deletedAt?'deleted':issueTicker(old.issueMonth)+' '+money(old.amount)+' → '+newTicker+' '+money(b.amount);row.innerHTML='<div><b></b><small></small></div><button class="secondary">Acknowledge</button>';row.querySelector('b').textContent=issueTicker(old.issueMonth);row.querySelector('small').textContent=detail;row.querySelector('button').onclick=async()=>{const current=bonds.find(x=>x.id===b.id);if(!current)return;await put({...current,snowball:current.deletedAt?null:{importedAt:Date.now(),amount:Number(current.amount),issueMonth:current.issueMonth},modifiedAt:new Date().toISOString()});await load();await changed();row.remove();if(!box.children.length)$('#snowballDriftDialog').close()};box.appendChild(row)}$('#snowballDriftDialog').showModal()}
+function showSnowballStatus(){
+ const box=$('#snowballStatusList');box.innerHTML='';
+ for(const b of bonds.filter(x=>!x.deletedAt).sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt)))){
+  const row=document.createElement('label');row.className='drift-row';
+  const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!b.snowball;cb.dataset.id=b.id;
+  const info=document.createElement('div'),title=document.createElement('b'),detail=document.createElement('small');
+  title.textContent=(b.nickname||'I Bond')+' — '+money(b.amount);
+  detail.textContent=issueTicker(b.issueMonth)+(b.snowball?' • already in Snowball':' • new / not imported');
+  info.append(title,detail);row.append(cb,info);box.appendChild(row)
+ }
+ $('#snowballStatusDialog').showModal()
+}
+async function saveSnowballStatus(){
+ const checks=[...document.querySelectorAll('#snowballStatusList input[type="checkbox"]')],now=Date.now();
+ for(const cb of checks){
+  const b=bonds.find(x=>x.id===cb.dataset.id);if(!b)continue;
+  const next=cb.checked?{importedAt:b.snowball?.importedAt||now,amount:Number(b.amount),issueMonth:b.issueMonth}:null;
+  if(JSON.stringify(next)!==JSON.stringify(b.snowball||null))await put({...b,snowball:next,modifiedAt:new Date().toISOString()})
+ }
+ await load();await changed();$('#snowballStatusDialog').close();toast('Snowball import status saved')
+}
 async function exportSnowballCsv(mode){
  const active=bonds.filter(b=>!b.deletedAt);if(!active.length)return toast('No bonds to export');
  const pending=await getMeta('snowballPending');if(pending&&mode!=='prices')return toast('Resolve the pending Snowball import first');
@@ -151,7 +172,7 @@ async function init(){
  if(googleClientId())$('#driveState').textContent='Configured';
  $('#addBtn').onclick=()=>{$('#dialogTitle').textContent='Add I Bond';$('#bondForm').reset();$('#editId').value='';$('#deleteBtn').hidden=true;$('#issueMonth').value=new Date().toISOString().slice(0,7);$('#bondDialog').showModal()};
  document.querySelectorAll('.close').forEach(x=>x.onclick=()=>$('#bondDialog').close());
- $('#bondForm').onsubmit=async e=>{e.preventDefault();const id=$('#editId').value||crypto.randomUUID(),existing=bonds.find(x=>x.id===id),createdAt=existing?.createdAt||new Date().toISOString();await put({id,nickname:$('#nickname').value.trim(),issueMonth:$('#issueMonth').value,amount:Number($('#amount').value),snowball:existing?.snowball||null,createdAt,modifiedAt:new Date().toISOString()});/* A newly created purchase must remain unimported even if a stale synced record with the same id is ever encountered. */if(!existing){const saved=bonds.find(x=>x.id===id);if(saved?.snowball)await put({...saved,snowball:null,modifiedAt:new Date().toISOString()})}$('#bondDialog').close();await load();await changed();toast('Bond saved')};
+ $('#bondForm').onsubmit=async e=>{e.preventDefault();const id=$('#editId').value||crypto.randomUUID(),existing=bonds.find(x=>x.id===id);await put({id,nickname:$('#nickname').value.trim(),issueMonth:$('#issueMonth').value,amount:Number($('#amount').value),snowball:existing?.snowball||null,createdAt:existing?.createdAt||new Date().toISOString(),modifiedAt:new Date().toISOString()});$('#bondDialog').close();await load();await changed();toast('Bond saved')};
  $('#deleteBtn').onclick=async()=>{const id=$('#editId').value;if(!id||!confirm('Delete this bond from the portfolio?'))return;$('#bondDialog').close();await del(id);toast('Bond deleted')};
  $('#sortBtn').onclick=()=>{sortNewest=!sortNewest;$('#sortBtn').textContent=sortNewest?'Newest first':'Oldest first';render()};
  $('#hideBtn').onclick=()=>document.body.classList.toggle('private');
@@ -159,7 +180,7 @@ async function init(){
  document.querySelector('[data-tab="analytics"]').onclick=()=>$('#analyticsDialog').showModal();document.querySelector('[data-tab="timeline"]').onclick=()=>$('#timelineDialog').showModal();
  document.querySelectorAll('.close-panel').forEach(x=>x.onclick=()=>x.closest('dialog').close());
  $('#themeBtn').onclick=()=>$('#themeDialog').showModal();$('#appearanceBtn').onclick=()=>$('#themeDialog').showModal();$('.close-theme').onclick=()=>$('#themeDialog').close();document.querySelectorAll('.theme-options [data-theme]').forEach(x=>x.onclick=()=>{applyTheme(x.dataset.theme);$('#themeDialog').close()});
- $('#snowballPendingYes').onclick=()=>resolveSnowballPending('yes');$('#snowballPendingNotYet').onclick=()=>resolveSnowballPending('notyet');$('#snowballPendingDiscard').onclick=()=>resolveSnowballPending('discard');$('.close-drift').onclick=()=>$('#snowballDriftDialog').close();$('#exportBtn').onclick=exportBackup;$('#exportCsvFullBtn').onclick=()=>exportSnowballCsv('full');$('#exportCsvIncrementalBtn').onclick=()=>exportSnowballCsv('incremental');$('#exportCsvPricesBtn').onclick=()=>exportSnowballCsv('prices');$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
+ $('#snowballPendingYes').onclick=()=>resolveSnowballPending('yes');$('#snowballPendingNotYet').onclick=()=>resolveSnowballPending('notyet');$('#snowballPendingDiscard').onclick=()=>resolveSnowballPending('discard');$('.close-drift').onclick=()=>$('#snowballDriftDialog').close();$('#exportBtn').onclick=exportBackup;$('#exportCsvFullBtn').onclick=()=>exportSnowballCsv('full');$('#exportCsvIncrementalBtn').onclick=()=>exportSnowballCsv('incremental');$('#exportCsvPricesBtn').onclick=()=>exportSnowballCsv('prices');$('#snowballStatusBtn').onclick=showSnowballStatus;$('#snowballStatusSave').onclick=saveSnowballStatus;$('.close-snowball-status').onclick=()=>$('#snowballStatusDialog').close();$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
  $('#driveBtn').onclick=requestSync;$('#syncBtn').onclick=requestSync;
  $('#rateUpdateBtn').onclick=()=>{$('#ratePeriod').value=nextRatePeriod();$('#rateDialog').showModal()};
  document.querySelectorAll('.close-rate').forEach(x=>x.onclick=()=>$('#rateDialog').close());
