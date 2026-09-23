@@ -75,12 +75,12 @@ function localDateKey(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth
 function issueDate(issueMonth){return issueMonth+'-01'}
 function safeCsvText(v){const s=String(v??'');return /^[=+\-@]/.test(s)?"'"+s:s}
 function csvCell(v){const s=safeCsvText(v);return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
-function snowballRows(mode){
+function snowballRows(mode,exportedIds=new Set()){
  const active=bonds.filter(b=>!b.deletedAt),byIssue=new Map();
  for(const b of active){const ticker=issueTicker(b.issueMonth),group=byIssue.get(ticker)||{issueMonth:b.issueMonth,bonds:[]};group.bonds.push(b);byIssue.set(ticker,group)}
  const rows=[];
  for(const [ticker,g] of [...byIssue.entries()].sort((a,b)=>a[1].issueMonth.localeCompare(b[1].issueMonth))){
-  if(mode==='full')for(const b of g.bonds)rows.push(['Buy',issueDate(b.issueMonth),ticker,'1.00',Number(b.amount).toFixed(2),'USD','0','CUSTOM_HOLDING','Series I Savings Bond']);
+  if(mode==='full'||mode==='incremental')for(const b of g.bonds)if(mode==='full'||!exportedIds.has(b.id))rows.push(['Buy',issueDate(b.issueMonth),ticker,'1.00',Number(b.amount).toFixed(2),'USD','0','CUSTOM_HOLDING','Series I Savings Bond']);
   const valued=g.bonds.map(b=>({b,c:estimateBond(b)}));
   if(valued.some(x=>x.c.unsupported))continue;
   const invested=valued.reduce((s,x)=>s+Number(x.b.amount),0);
@@ -90,11 +90,16 @@ function snowballRows(mode){
  }
  return rows;
 }
-function exportSnowballCsv(mode){
- if(!bonds.some(b=>!b.deletedAt))return toast('No bonds to export');
- const rows=snowballRows(mode),csv=[SNOWBALL_HEADERS,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
+async function exportSnowballCsv(mode){
+ const active=bonds.filter(b=>!b.deletedAt);if(!active.length)return toast('No bonds to export');
+ const exportedIds=new Set(await getMeta('snowballExportedBondIds')||[]),rows=snowballRows(mode,exportedIds);
+ const csv=[SNOWBALL_HEADERS,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a'),date=localDateKey();
- a.href=URL.createObjectURL(blob);a.download='ibond-snowball-'+mode+'-'+date+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Snowball CSV exported');
+ a.href=URL.createObjectURL(blob);a.download='ibond-snowball-'+mode+'-'+date+'.csv';a.click();URL.revokeObjectURL(a.href);
+ // A successful local download marks Buy rows as exported. Full history establishes/resets the baseline; incremental adds only newly exported bond IDs.
+ if(mode==='full')await setMeta('snowballExportedBondIds',active.map(b=>b.id));
+ if(mode==='incremental'){const next=new Set(exportedIds);for(const b of active)next.add(b.id);await setMeta('snowballExportedBondIds',[...next])}
+ toast(mode==='incremental'?'Snowball incremental CSV exported':'Snowball CSV exported');
 }
 async function importBackup(file){const data=JSON.parse(await file.text());if(![1,2].includes(data.schemaVersion)||!Array.isArray(data.bonds)||!data.bonds.every(validBond))throw Error('Unsupported or invalid backup');if(!confirm('Restore will replace the portfolio on this device. Continue?'))return;await replaceBonds(data.bonds);if(Array.isArray(data.rateUpdates)){rateUpdates=setRateUpdates(data.rateUpdates);await setMeta('rateUpdates',rateUpdates)}await changed();render();toast('Portfolio restored')}
 async function getMeta(key){return new Promise((res,rej)=>{const r=tx(META).get(key);r.onsuccess=()=>res(r.result?.value);r.onerror=()=>rej(r.error)})}
@@ -149,7 +154,7 @@ async function init(){
  document.querySelector('[data-tab="analytics"]').onclick=()=>$('#analyticsDialog').showModal();document.querySelector('[data-tab="timeline"]').onclick=()=>$('#timelineDialog').showModal();
  document.querySelectorAll('.close-panel').forEach(x=>x.onclick=()=>x.closest('dialog').close());
  $('#themeBtn').onclick=()=>$('#themeDialog').showModal();$('#appearanceBtn').onclick=()=>$('#themeDialog').showModal();$('.close-theme').onclick=()=>$('#themeDialog').close();document.querySelectorAll('.theme-options [data-theme]').forEach(x=>x.onclick=()=>{applyTheme(x.dataset.theme);$('#themeDialog').close()});
- $('#exportBtn').onclick=exportBackup;$('#exportCsvFullBtn').onclick=()=>exportSnowballCsv('full');$('#exportCsvPricesBtn').onclick=()=>exportSnowballCsv('prices');$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
+ $('#exportBtn').onclick=exportBackup;$('#exportCsvFullBtn').onclick=()=>exportSnowballCsv('full');$('#exportCsvIncrementalBtn').onclick=()=>exportSnowballCsv('incremental');$('#exportCsvPricesBtn').onclick=()=>exportSnowballCsv('prices');$('#importFile').onchange=async e=>{try{await importBackup(e.target.files[0])}catch(err){toast(err.message||'Backup could not be imported')}};
  $('#driveBtn').onclick=requestSync;$('#syncBtn').onclick=requestSync;
  $('#rateUpdateBtn').onclick=()=>{$('#ratePeriod').value=nextRatePeriod();$('#rateDialog').showModal()};
  document.querySelectorAll('.close-rate').forEach(x=>x.onclick=()=>$('#rateDialog').close());
