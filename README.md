@@ -12,6 +12,7 @@ Private, mobile-first Progressive Web App for manually tracking electronic Serie
 - Per-bond current rate, redemption eligibility, penalty end and maturity timeline
 - Analytics and timeline views
 - JSON backup/export + atomic restore/import
+- CSV export for external portfolio tracking and spreadsheet use
 - Optional Google Drive appDataFolder synchronization
 - Tombstone-aware per-bond merge
 - No TreasuryDirect credentials or personal portfolio data in GitHub
